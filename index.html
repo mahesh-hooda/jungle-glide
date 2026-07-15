@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07121c" />
+    <title>Flight</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        min-height: 100svh; margin: 0; display: grid; place-items: center; overflow: hidden;
+        background: radial-gradient(circle at 50% 0%, #193b50, #07111b 58%, #020508);
+        color: #f6f7ef; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .shell {
+        position: relative; width: min(96vw, 1024px); aspect-ratio: 16 / 9; max-height: 90svh; overflow: hidden;
+        border: 1px solid rgba(232, 248, 248, .28); border-radius: 24px; background: #081d2c;
+        box-shadow: 0 30px 82px rgba(0, 0, 0, .6), inset 0 1px 1px rgba(255,255,255,.22);
+        user-select: none; touch-action: manipulation;
+      }
+      canvas { display: block; width: 100%; height: 100%; }
+      .hud { position: absolute; z-index: 2; inset: 0; padding: clamp(14px, 2.2vw, 24px); pointer-events: none; }
+      .score-box { text-align: right; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+      .score { font-size: clamp(38px, 6vw, 68px); font-weight: 900; line-height: .82; font-variant-numeric: tabular-nums; }
+      .record { margin-top: 8px; color: #e8e4bf; font-size: clamp(9px, 1.15vw, 13px); font-weight: 800; letter-spacing: .11em; }
+      .overlay {
+        position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center;
+        background: radial-gradient(circle at 50% 45%, rgba(4, 24, 30, .02), rgba(2, 8, 13, .54)); transition: opacity .18s ease;
+      }
+      .overlay.hidden { opacity: 0; pointer-events: none; }
+      .card { width: min(440px, 100%); transform: translateY(-2%); }
+      .eyebrow { min-height: 14px; margin: 0 0 9px; color: #def0dc; font-size: clamp(9px, 1.12vw, 13px); font-weight: 800; letter-spacing: .22em; text-transform: uppercase; }
+      h1 { margin: 0; font-size: clamp(38px, 6.4vw, 72px); line-height: .93; letter-spacing: -.055em; text-shadow: 0 4px 22px rgba(0,0,0,.44); }
+      .message { margin: 17px auto 23px; max-width: 34ch; color: #f1f3ec; font-size: clamp(13px, 1.52vw, 17px); line-height: 1.5; }
+      .name-form { margin: 0 auto 17px; max-width: 295px; text-align: left; }
+      .name-form.hidden, .leaderboard.hidden { display: none; }
+      .name-form label { display: block; margin-bottom: 7px; color: #eef7ed; font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+      .name-form input {
+        width: 100%; border: 1px solid rgba(246, 237, 190, .54); border-radius: 10px; padding: 11px 13px;
+        outline: none; background: rgba(2, 16, 22, .64); color: #fff; font: 600 16px/1.1 inherit; box-shadow: inset 0 1px rgba(255,255,255,.1);
+      }
+      .name-form input:focus { border-color: #f6d676; box-shadow: 0 0 0 3px rgba(236, 192, 87, .22); }
+      .name-error { display: block; min-height: 15px; margin-top: 6px; color: #ffe7ac; font-size: 10px; font-weight: 700; letter-spacing: .03em; }
+      button {
+        appearance: none; pointer-events: auto; border: 1px solid rgba(255,255,255,.38); border-radius: 999px; padding: 14px 24px;
+        background: linear-gradient(135deg, #efd57e, #bc7330); color: #17130d; cursor: pointer;
+        box-shadow: 0 7px 20px rgba(0,0,0,.31), inset 0 1px rgba(255,255,255,.5); font: 800 13px/1 inherit; letter-spacing: .09em; text-transform: uppercase;
+      }
+      button:hover { filter: brightness(1.1); }
+      .hint { display: block; margin-top: 14px; color: rgba(244,250,246,.86); font-size: 11px; letter-spacing: .055em; }
+      .record-photo { display: none; width: 150px; margin: 0 auto 14px; padding: 4px; border-radius: 13px; background: rgba(239, 231, 186, .82); box-shadow: 0 8px 27px rgba(0,0,0,.4); transform: rotate(-2deg); }
+      .record-photo.show { display: block; }
+      .record-photo img { display: block; width: 100%; aspect-ratio: 1.23; object-fit: cover; object-position: 52% 72%; border-radius: 9px; }
+      .record-photo span { display: block; padding: 6px 3px 2px; color: #332716; font-size: 8px; font-weight: 900; letter-spacing: .12em; }
+      .leaderboard { width: min(320px, 92%); margin: 0 auto 17px; padding: 10px 13px; border: 1px solid rgba(239, 235, 194, .34); border-radius: 13px; background: rgba(3, 15, 20, .69); text-align: left; backdrop-filter: blur(6px); }
+      .rank-status { color: #f0dc91; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-align: center; }
+      .leaderboard ol { margin: 8px 0 0; padding: 0; list-style: none; }
+      .leaderboard li { display: flex; justify-content: space-between; gap: 14px; padding: 4px 0; border-top: 1px solid rgba(255,255,255,.09); color: #f3f6ef; font-size: 11px; }
+      .leaderboard li span:last-child { color: #e7c876; font-weight: 900; }
+      @media (max-width: 560px) { .shell { width: 100vw; border-inline: 0; border-radius: 0; } }
+    </style>
+  </head>
+  <body>
+    <main class="shell" id="shell" aria-label="Bird flight game">
+      <canvas id="game" width="1280" height="720" aria-label="Game canvas"></canvas>
+      <div class="hud" aria-live="polite">
+        <div class="score-box"><div class="score" id="score">0</div><div class="record">HOODA'S RECORD · 101</div></div>
+      </div>
+      <div class="overlay" id="overlay">
+        <div class="card">
+          <p class="eyebrow" id="eyebrow"></p>
+          <div class="name-form" id="name-form">
+            <label for="player-name">Enter your name</label>
+            <input id="player-name" type="text" maxlength="18" autocomplete="nickname" placeholder="Your name" />
+            <span class="name-error" id="name-error"></span>
+          </div>
+          <div class="record-photo" id="record-photo"><img src="assets/hooda-record.jpeg" alt="Hooda in the mountains" /><span>HOODA'S RECORD · 101</span></div>
+          <h1 id="title">READY?</h1>
+          <p class="message" id="message">Press Space, any arrow key, click, or tap to fly.</p>
+          <div class="leaderboard hidden" id="leaderboard" aria-live="polite"><div class="rank-status" id="rank-status"></div><ol id="leaderboard-list"></ol></div>
+          <button id="action" type="button">Fly</button>
+          <span class="hint" id="hint">SPACE · ARROWS · CLICK · TAP</span>
+        </div>
+      </div>
+    </main>
+    <script src="backend-config.js"></script>
+    <script src="leaderboard.js"></script>
+    <script>
+      (() => {
+        const W = 1280, H = 720, MAX_SCORE = 99, SCENE_SCORE = 25;
+        const canvas = document.querySelector('#game');
+        const ctx = canvas.getContext('2d');
+        const shell = document.querySelector('#shell');
+        const overlay = document.querySelector('#overlay');
+        const action = document.querySelector('#action');
+        const title = document.querySelector('#title');
+        const eyebrow = document.querySelector('#eyebrow');
+        const message = document.querySelector('#message');
+        const hint = document.querySelector('#hint');
+        const recordPhoto = document.querySelector('#record-photo');
+        const scoreEl = document.querySelector('#score');
+        const nameForm = document.querySelector('#name-form');
+        const playerNameInput = document.querySelector('#player-name');
+        const nameError = document.querySelector('#name-error');
+        const leaderboard = document.querySelector('#leaderboard');
+        const rankStatus = document.querySelector('#rank-status');
+        const leaderboardList = document.querySelector('#leaderboard-list');
+
+        const sunrise = new Image(); sunrise.src = 'assets/tropical-valley.png';
+        const mountains = new Image(); mountains.src = 'assets/mountain-valley.png';
+        const birdSource = new Image(); birdSource.src = 'assets/bird-source.png';
+        const gateSource = new Image(); gateSource.src = 'assets/stone-gate-source.png';
+        let birdSprite = null, gateSprite = null;
+        birdSource.onload = () => { birdSprite = makeKeyedSprite(birdSource); };
+        gateSource.onload = () => { gateSprite = makeKeyedSprite(gateSource); };
+
+        let state = 'intro', score = 0, last = performance.now(), sceneBlend = 0, playerName = '', playerRegistered = false, registrationInFlight = false;
+        let screenShake = 0, flash = 0, gates = [];
+        let motes = Array.from({ length: 68 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.7 + .35, s: Math.random() * .38 + .12 }));
+        const bird = { x: 300, y: H / 2, r: 19, vy: 0, tilt: 0 };
+        let audioContext = null;
+
+        function makeKeyedSprite(image) {
+          const source = document.createElement('canvas'); source.width = image.naturalWidth; source.height = image.naturalHeight;
+          const sctx = source.getContext('2d', { willReadFrequently: true }); sctx.drawImage(image, 0, 0);
+          const pixels = sctx.getImageData(0, 0, source.width, source.height); const d = pixels.data;
+          let minX = source.width, minY = source.height, maxX = 0, maxY = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i + 1], b = d[i + 2];
+            if (r > 185 && b > 155 && g < 115) d[i + 3] = 0;
+            if (d[i + 3] > 24) { const p = i / 4, x = p % source.width, y = Math.floor(p / source.width); minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+          }
+          sctx.putImageData(pixels, 0, 0);
+          const pad = 9, x = Math.max(0, minX - pad), y = Math.max(0, minY - pad), w = Math.min(source.width - x, maxX - minX + pad * 2), h = Math.min(source.height - y, maxY - minY + pad * 2);
+          const output = document.createElement('canvas'); output.width = w; output.height = h; output.getContext('2d').drawImage(source, x, y, w, h, 0, 0, w, h);
+          return output;
+        }
+        function roundedRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+        function difficulty() {
+          return {
+            width: Math.max(68, 136 - score * .48),
+            gap: Math.max(168, 270 - score),
+            spacing: Math.max(248, 410 - score * 1.4),
+            speed: 185 + Math.min(score * 1.2, 115)
+          };
+        }
+        function reset() {
+          score = 0; scoreEl.textContent = '0'; sceneBlend = 0; screenShake = 0; flash = 0; gates = [];
+          bird.y = H / 2; bird.vy = 0; bird.tilt = 0;
+          for (let i = 0; i < 4; i++) addGate(805 + i * 360);
+        }
+        function addGate(x) {
+          const d = difficulty(), margin = 35, min = d.gap / 2 + margin, max = H - d.gap / 2 - margin;
+          const middle = min + Math.random() * (max - min);
+          gates.push({ x, w: d.width, top: middle - d.gap / 2, bottom: middle + d.gap / 2, passed: false });
+        }
+        function choosePlayer() {
+          const cleanName = window.Leaderboard?.normalizeName(playerNameInput.value) || playerNameInput.value.trim().replace(/\s+/g, ' ');
+          if (!cleanName || cleanName.length < 2) {
+            nameError.textContent = 'Enter a name with at least 2 characters.';
+            playerNameInput.focus();
+            return false;
+          }
+          playerName = cleanName; playerNameInput.value = cleanName; nameError.textContent = '';
+          return true;
+        }
+        function startFlight() {
+          reset(); state = 'playing'; overlay.classList.add('hidden'); recordPhoto.classList.remove('show'); bird.vy = -430; playFlap();
+        }
+        async function begin() {
+          if (state === 'intro' && !choosePlayer()) return;
+          if (!playerRegistered) {
+            if (!window.Leaderboard?.isConfigured()) {
+              nameError.textContent = 'The leaderboard database must be connected before you can start.';
+              return;
+            }
+            if (registrationInFlight) return;
+            registrationInFlight = true; action.disabled = true; action.textContent = 'Checking name…';
+            try {
+              await window.Leaderboard.registerPlayer(playerName);
+              playerRegistered = true;
+            } catch (error) {
+              playerName = ''; nameError.textContent = error.message || 'That name is already taken.';
+              playerNameInput.focus();
+              return;
+            } finally {
+              registrationInFlight = false; action.disabled = false; action.textContent = state === 'over' ? 'Fly again' : 'Fly';
+            }
+          }
+          startFlight();
+        }
+        function flap() {
+          if (state === 'intro' || state === 'over') return begin();
+          if (state === 'playing') { bird.vy = -430; playFlap(); }
+        }
+        function gameOver(capped = false) {
+          if (state !== 'playing') return;
+          state = 'over'; screenShake = capped ? 5 : 15; flash = 1; playCrash();
+          eyebrow.textContent = capped ? '99 IS THE LIMIT' : `SCORE · ${score}`;
+          title.textContent = capped ? 'SO CLOSE' : 'GAME OVER';
+          message.textContent = "Try again to beat Hooda's 101 record.";
+          action.textContent = 'Fly again'; hint.textContent = 'SPACE · ARROWS · CLICK · TAP';
+          nameForm.classList.add('hidden'); recordPhoto.classList.add('show'); leaderboard.classList.remove('hidden'); overlay.classList.remove('hidden');
+          saveScoreAndShowRank();
+        }
+        async function saveScoreAndShowRank() {
+          leaderboardList.replaceChildren();
+          if (!window.Leaderboard?.isConfigured()) {
+            rankStatus.textContent = 'Connect Supabase to enable the shared leaderboard.';
+            return;
+          }
+          rankStatus.textContent = 'Saving score…';
+          try {
+            const entry = await window.Leaderboard.submitScore(playerName, score);
+            const rank = Number(entry.player_rank);
+            rankStatus.textContent = `Your global rank: #${rank} · Best: ${entry.best_score}`;
+            renderLeaderboard(await window.Leaderboard.fetchTopPlayers());
+          } catch (_) {
+            rankStatus.textContent = 'Could not reach the leaderboard. Try again shortly.';
+          }
+        }
+        function renderLeaderboard(players) {
+          leaderboardList.replaceChildren();
+          players.forEach((player, index) => {
+            const item = document.createElement('li'), name = document.createElement('span'), result = document.createElement('span');
+            name.textContent = `${index + 1}. ${player.player_name}`; result.textContent = player.best_score;
+            item.append(name, result); leaderboardList.append(item);
+          });
+        }
+        function playTone(type, from, to, duration, volume, when = 0) {
+          try {
+            audioContext ??= new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioContext.currentTime + when, osc = audioContext.createOscillator(), gain = audioContext.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(from, now); osc.frequency.exponentialRampToValueAtTime(Math.max(35, to), now + duration);
+            gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(volume, now + .012); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+            osc.connect(gain).connect(audioContext.destination); osc.start(now); osc.stop(now + duration + .03);
+          } catch (_) { /* Audio is optional if a browser blocks it. */ }
+        }
+        function playFlap() { playTone('triangle', 430, 720, .10, .085); playTone('sine', 590, 910, .08, .03, .025); }
+        function playCrash() { playTone('sawtooth', 210, 45, .32, .12); playTone('square', 94, 38, .23, .055, .035); }
+        function drawLandscape(image, alpha) {
+          if (!image.complete || !image.naturalWidth || alpha <= 0) return;
+          const scale = Math.max(W / image.naturalWidth, H / image.naturalHeight), bw = image.naturalWidth * scale, bh = image.naturalHeight * scale;
+          const x = (W - bw) / 2, y = (H - bh) / 2;
+          ctx.globalAlpha = alpha; ctx.drawImage(image, x, y, bw, bh); ctx.globalAlpha = 1;
+        }
+        function drawBackground(t, dt) {
+          sceneBlend += ((score >= SCENE_SCORE ? 1 : 0) - sceneBlend) * Math.min(1, dt * 1.9);
+          ctx.fillStyle = '#09293a'; ctx.fillRect(0, 0, W, H);
+          drawLandscape(sunrise, 1 - sceneBlend); drawLandscape(mountains, sceneBlend);
+          const haze = ctx.createLinearGradient(0, 0, 0, H); haze.addColorStop(0, 'rgba(240,249,239,.10)'); haze.addColorStop(.5, 'rgba(14,55,55,.05)'); haze.addColorStop(1, 'rgba(0,12,16,.38)'); ctx.fillStyle = haze; ctx.fillRect(0, 0, W, H);
+          motes.forEach(m => { m.x -= m.s * (score >= SCENE_SCORE ? 1.2 : 1); if (m.x < -4) { m.x = W + 4; m.y = 45 + Math.random() * (H - 100); } ctx.fillStyle = `rgba(246, 236, 179, ${.08 + m.r / 35})`; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2); ctx.fill(); });
+        }
+        function drawGate(g) {
+          if (!gateSprite) return;
+          function pipe(y, h, upsideDown) {
+            ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.42)'; ctx.shadowBlur = 12; ctx.shadowOffsetX = 6; ctx.shadowOffsetY = 6;
+            if (upsideDown) { ctx.translate(g.x + g.w / 2, y + h / 2); ctx.rotate(Math.PI); ctx.drawImage(gateSprite, -g.w / 2, -h / 2, g.w, h); }
+            else ctx.drawImage(gateSprite, g.x, y, g.w, h);
+            ctx.restore();
+          }
+          pipe(0, g.top, true); pipe(g.bottom, H - g.bottom, false);
+        }
+        function drawBird() {
+          ctx.save(); ctx.translate(bird.x, bird.y); ctx.rotate(bird.tilt);
+          const glow = ctx.createRadialGradient(0, 0, 3, 0, 0, 58); glow.addColorStop(0, 'rgba(252,196,74,.32)'); glow.addColorStop(1, 'rgba(252,196,74,0)'); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, 58, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowColor = 'rgba(0,0,0,.52)'; ctx.shadowBlur = 9; ctx.shadowOffsetX = 5; ctx.shadowOffsetY = 8;
+          if (birdSprite) ctx.drawImage(birdSprite, -52, -52, 104, 104);
+          else { ctx.fillStyle = '#f1aa36'; ctx.beginPath(); ctx.ellipse(0, 0, 24, 17, 0, 0, Math.PI * 2); ctx.fill(); }
+          ctx.restore();
+        }
+        function update(dt) {
+          if (state !== 'playing') return;
+          bird.vy += 1165 * dt; bird.y += bird.vy * dt; bird.tilt = Math.max(-.42, Math.min(1.06, bird.vy / 800));
+          const d = difficulty();
+          gates.forEach(g => {
+            g.x -= d.speed * dt;
+            if (!g.passed && g.x + g.w < bird.x - bird.r) {
+              g.passed = true; score++; scoreEl.textContent = score; flash = .28;
+              if (score >= MAX_SCORE) gameOver(true);
+            }
+          });
+          if (gates.length && gates[0].x + gates[0].w < -60) { gates.shift(); addGate(gates[gates.length - 1].x + d.spacing); }
+          if (bird.y - bird.r < 0 || bird.y + bird.r > H) return gameOver();
+          for (const g of gates) if (bird.x + bird.r > g.x && bird.x - bird.r < g.x + g.w && (bird.y - bird.r < g.top || bird.y + bird.r > g.bottom)) return gameOver();
+        }
+        function render(now) {
+          const dt = Math.min(.033, (now - last) / 1000); last = now; update(dt); flash = Math.max(0, flash - dt * 2.6); screenShake = Math.max(0, screenShake - dt * 36);
+          ctx.save(); if (screenShake) ctx.translate((Math.random() - .5) * screenShake, (Math.random() - .5) * screenShake);
+          drawBackground(now / 1000, dt); gates.forEach(drawGate); drawBird();
+          const vignette = ctx.createRadialGradient(W / 2, H / 2, 180, W / 2, H / 2, 810); vignette.addColorStop(.48, 'rgba(0,0,0,0)'); vignette.addColorStop(1, 'rgba(0,9,12,.5)'); ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+          if (flash) { ctx.fillStyle = `rgba(255,244,186,${flash * .38})`; ctx.fillRect(0, 0, W, H); }
+          ctx.restore(); requestAnimationFrame(render);
+        }
+        function input(event) {
+          if (event?.type === 'pointerdown' && event.target?.closest('button')) return;
+          event?.preventDefault(); flap();
+        }
+        action.addEventListener('click', begin);
+        playerNameInput.addEventListener('input', () => { nameError.textContent = ''; });
+        shell.addEventListener('pointerdown', input);
+        window.addEventListener('keydown', event => { if (['Space', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'KeyW'].includes(event.code)) input(event); });
+        reset(); requestAnimationFrame(render);
+      })();
+    </script>
+  </body>
+</html>
